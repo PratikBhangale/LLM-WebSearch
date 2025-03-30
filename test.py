@@ -15,12 +15,11 @@ tavily_api_key = st.secrets['TAVILY_API_KEY']
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_tavily import TavilySearch
 
 # Set up the page
 st.set_page_config(layout="wide")
-st.title("Chat with Web Search (Powered by Groq)")
+st.title("Chat with Web Search (Powered by Groq & Tavily)")
 
 # Initialize session state for visible messages and full conversation context
 if "messages" not in st.session_state:
@@ -36,7 +35,7 @@ if "context" not in st.session_state:
 @st.cache_resource
 def get_llm():
     return ChatGroq(
-        model="llama3-8b-8192",  
+        model="llama-3.1-8b-instant",  
         temperature=0.7, 
         streaming=True,
         api_key=groq_api_key
@@ -44,7 +43,7 @@ def get_llm():
 
 @st.cache_resource
 def get_search_tool():
-    return DuckDuckGoSearchRun()
+    return TavilySearch(api_key=tavily_api_key, max_results=5)
 
 @st.cache_resource
 def get_query_generator():
@@ -65,12 +64,12 @@ with st.sidebar:
     # Add model selection dropdown
     model_option = st.selectbox(
         "Select Groq Model",
-        ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"],
+        ["llama3-70b-8192", "llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
         index=0
     )
     
     # Update model if changed
-    if model_option != getattr(llm, "model", "llama3-8b-8192"):
+    if model_option != getattr(llm, "model", "llama-3.1-8b-instant"):
         llm = ChatGroq(
             model=model_option,
             temperature=0.7,
@@ -165,7 +164,7 @@ if user_input:
             search_query = generate_search_query(user_input)
             
             # Perform the search with the generated query
-            search_results = search_tool.invoke(search_query)
+            search_results = search_tool.invoke({"query": search_query})
             
             # Show search query and results in expander
             with st.expander("Web Search Details", expanded=False):

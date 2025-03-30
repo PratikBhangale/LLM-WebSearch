@@ -3,3 +3,4 @@ python-dotenv
 langchain-groq
 langchain-core
 langchain-tavily
+duckduckgo-search

@@ -16,6 +16,7 @@ tavily_api_key = st.secrets['TAVILY_API_KEY']
 from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_tavily import TavilySearch
 
 # Set up the page
 st.set_page_config(layout="wide")

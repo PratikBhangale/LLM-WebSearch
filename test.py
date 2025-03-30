@@ -1,6 +1,7 @@
 import streamlit as st
-# from dotenv import load_dotenv
 import os
+# from dotenv import load_dotenv
+
 # load_dotenv()
 
 # # Load API keys from .env file
@@ -108,16 +109,17 @@ def generate_search_query(user_input):
             
         prompt = [
             SystemMessage(content="""You are a search query generator. 
+            If any part if the user input is in inverted commas, you must search it as it is.
             Your task is to generate an effective search query based on the user's question and the conversation history.
             Generate a concise, specific query that will return the most relevant information.
-            Return ONLY the search query text, nothing else and make sure to not give any links to websites. Just text.
-            Also make sure to generate the query in English language, and generate exactly what the user asked for."""),
+            Return ONLY the search query text, nothing else.
+            You MUST NOT include any urls or links like site:sap.com in the search query."""),
             HumanMessage(content=f"""Conversation history:
             {conversation_history}
 
             User's current question: {user_input}
-
-        Generate an optimal search query based on this context:""")
+            You MUST NOT include any urls or links like site:sap.com in the search query.
+            Generate an optimal search query based on this context:""")
         ]
         
         # Get the generated query

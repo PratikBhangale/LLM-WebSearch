@@ -33,13 +33,18 @@ if "context" not in st.session_state:
 
 # Get chatbot tools
 @st.cache_resource
-def get_llm():
+def get_llm(model_name="llama-3.1-8b-instant"):
     return ChatGroq(
-        model="llama-3.1-8b-instant",  
+        model=model_name,  
         temperature=0.7, 
         streaming=True,
         api_key=groq_api_key
     )
+
+# Initialize the LLM in session state if not already there
+if "llm" not in st.session_state:
+    st.session_state.llm = get_llm()
+
 
 @st.cache_resource
 def get_search_tool():
@@ -64,18 +69,17 @@ with st.sidebar:
     # Add model selection dropdown
     model_option = st.selectbox(
         "Select Groq Model",
-        ["llama3-70b-8192", "llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
+        [ "llama-3.1-8b-instant", "llama3-70b-8192", "llama-3.3-70b-versatile"],
         index=0
     )
     
-    # Update model if changed
-    if model_option != getattr(llm, "model", "llama-3.1-8b-instant"):
-        llm = ChatGroq(
-            model=model_option,
-            temperature=0.7,
-            streaming=True,
-            api_key=groq_api_key
-        )
+    # Store current model in session state for proper comparison
+    if "current_model" not in st.session_state:
+        st.session_state.current_model = "llama-3.1-8b-instant"  # Default model
+        
+    if model_option != st.session_state.current_model:
+        st.session_state.llm = get_llm(model_option)
+        st.session_state.current_model = model_option
         st.success(f"Model changed to {model_option}")
     
     use_search = st.checkbox("Enable web search", value=True)
@@ -212,7 +216,7 @@ if user_input:
     
     # Display info about the model being used
     with st.expander("Model Information", expanded=False):
-        st.write(f"Using Groq model: **{getattr(llm, 'model', 'llama3-70b-8192')}**")
+        st.write(f"Using Groq model: **{model_option}**")
     
     # Get response from LLM
     with st.chat_message("assistant"):
@@ -221,7 +225,7 @@ if user_input:
         
         try:
             # Stream the response
-            for chunk in llm.stream(messages_for_llm):
+            for chunk in st.session_state.llm.stream(messages_for_llm):
                 if chunk.content:
                     full_response += chunk.content
                     response_placeholder.markdown(full_response)

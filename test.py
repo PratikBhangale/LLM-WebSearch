@@ -1,14 +1,20 @@
 import streamlit as st
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 import os
-load_dotenv()
+# load_dotenv()
+
+# # Load API keys from .env file
+# groq_api_key = os.getenv('GROQ_API_KEY')
+# tavily_api_key = os.getenv('TAVILY_API_KEY')
+# if not groq_api_key:
+#     raise ValueError("GROQ API key not found in .env file")
+
 groq_api_key = st.secrets['GROQ_API_KEY']  
 tavily_api_key = st.secrets['TAVILY_API_KEY']
 
-
-from langchain_groq import ChatGroq  # Changed from langchain_openai to langchain_groq
+from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_tavily import TavilySearch
+from langchain_community.tools import DuckDuckGoSearchRun
 
 # Set up the page
 st.set_page_config(layout="wide")
@@ -36,12 +42,12 @@ def get_llm():
 
 @st.cache_resource
 def get_search_tool():
-    return TavilySearch(api_key=tavily_api_key)
+    return DuckDuckGoSearchRun()
 
 @st.cache_resource
 def get_query_generator():
     return ChatGroq(
-        model="llama3-8b-8192",  # Using a smaller model for query generation
+        model="llama3-70b-8192", 
         temperature=0.1,
         api_key=groq_api_key
     )
@@ -62,7 +68,7 @@ with st.sidebar:
     )
     
     # Update model if changed
-    if model_option != getattr(llm, "model", "llama3-70b-8192"):
+    if model_option != getattr(llm, "model", "llama3-8b-8192"):
         llm = ChatGroq(
             model=model_option,
             temperature=0.7,
@@ -91,18 +97,6 @@ for message in st.session_state.messages:
 # Accept user input
 user_input = st.chat_input("Ask anything...")
 
-def format_search_results(results):
-    if not results or not isinstance(results, list):
-        return ""
-        
-    formatted = ""
-    for i, result in enumerate(results, 1):
-        if isinstance(result, dict):
-            formatted += f"Source {i}: {result.get('title', 'No title')}\n"
-            formatted += f"URL: {result.get('url', 'No URL')}\n"
-            formatted += f"Content: {result.get('content', 'No content available')}\n\n"
-    return formatted
-
 def generate_search_query(user_input):
     # If we have conversation history, use it to generate a better search query
     if len(st.session_state.messages) > 0:
@@ -114,22 +108,23 @@ def generate_search_query(user_input):
             
         prompt = [
             SystemMessage(content="""You are a search query generator. 
-Your task is to generate an effective search query based on the user's question and the conversation history.
-Generate a concise, specific query that will return the most relevant information.
-Return ONLY the search query text, nothing else."""),
+            Your task is to generate an effective search query based on the user's question and the conversation history.
+            Generate a concise, specific query that will return the most relevant information.
+            Return ONLY the search query text, nothing else and make sure to not give any links to websites. Just text.
+            Also make sure to generate the query in English language, and generate exactly what the user asked for."""),
             HumanMessage(content=f"""Conversation history:
-{conversation_history}
+            {conversation_history}
 
-User's current question: {user_input}
+            User's current question: {user_input}
 
-Generate an optimal search query based on this context:""")
+        Generate an optimal search query based on this context:""")
         ]
         
         # Get the generated query
         response = query_generator.invoke(prompt)
         generated_query = response.content.strip()
         
-        # Show the generated query in the UI
+        # Store the generated query in session state
         st.session_state.generated_query = generated_query
         return generated_query
     else:
@@ -167,50 +162,45 @@ if user_input:
             search_query = generate_search_query(user_input)
             
             # Perform the search with the generated query
-            raw_results = search_tool.invoke(search_query)
+            search_results = search_tool.invoke(search_query)
             
-            # Extract results from response
-            if isinstance(raw_results, dict) and 'results' in raw_results:
-                search_results = raw_results['results']
-            else:
-                search_results = raw_results
-                
             # Show search query and results in expander
             with st.expander("Web Search Details", expanded=False):
                 if hasattr(st.session_state, 'generated_query'):
                     st.write(f"**Generated search query:** {st.session_state.generated_query}")
-                st.json(raw_results)
+                
+                # Display the search results as text
+                if search_results:
+                    st.text_area("Search Results", search_results, height=200)
     
     # Update system message if we have search results
-    if search_results and len(search_results) > 0:
+    if search_results:
         system_content = """You are a helpful assistant with access to real-time web search results. 
-When answering questions, you should:
-1. Use the web search results provided to give current, accurate information
-2. Refer to specific details from the search results when relevant
-3. Mention that your information comes from web searches when applicable
-4. Answer confidently based on the search results without disclaimers about not having real-time information
+        When answering questions, you should:
+        1. Use the web search results provided to give current, accurate information
+        2. Refer to specific details from the search results when relevant
+        3. Mention that your information comes from web searches when applicable
+        4. Answer confidently based on the search results without disclaimers about not having real-time information
 
-Remember: You DO have access to current information through web searches that were just performed."""
+        Remember: You DO have access to current information through web searches that were just performed."""
         
         # Update system message in context
         st.session_state.context[0] = {"role": "system", "content": system_content}
     
     # Add user message to context (either original or augmented with search results)
-    if search_results and len(search_results) > 0:
-        formatted_results = format_search_results(search_results)
+    if search_results:
         search_query_info = ""
         if hasattr(st.session_state, 'generated_query'):
             search_query_info = f"Search query used: \"{st.session_state.generated_query}\"\n\n"
             
-        if formatted_results:
-            augmented_query = f"""Web search results:
-{search_query_info}{formatted_results}
+        augmented_query = f"""Web search results:
+        {search_query_info}{search_results}
 
-Using the information from these search results, please answer the following question:
-{user_input}"""
-            
-            # Add the augmented query to the context (not visible chat)
-            st.session_state.context.append({"role": "user", "content": augmented_query})
+        Using the information from these search results, please answer the following question:
+        {user_input}"""
+        
+        # Add the augmented query to the context (not visible chat)
+        st.session_state.context.append({"role": "user", "content": augmented_query})
     else:
         # Just add the regular user input to context
         st.session_state.context.append({"role": "user", "content": user_input})
